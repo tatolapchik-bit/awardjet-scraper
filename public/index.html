@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>AwardJet - Award Flight Search</title>
+    <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; padding: 20px; }
+          .container { max-width: 900px; margin: 0 auto; }
+          h1 { text-align: center; margin-bottom: 30px; font-size: 2.5em; }
+          .search-form { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 15px; margin-bottom: 30px; }
+          .form-row { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
+          .form-group { flex: 1; min-width: 150px; }
+          label { display: block; margin-bottom: 5px; font-size: 0.9em; opacity: 0.8; }
+          input, select { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1em; }
+          button { background: #4CAF50; color: white; padding: 15px 30px; border: none; border-radius: 8px; cursor: pointer; font-size: 1.1em; width: 100%; }
+          button:hover { background: #45a049; }
+          button:disabled { background: #666; cursor: wait; }
+          .results { background: rgba(255,255,255,0.05); border-radius: 15px; padding: 20px; }
+          .flight { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+          .flight-info { flex: 1; }
+          .airline { font-weight: bold; font-size: 1.1em; }
+          .route { opacity: 0.8; font-size: 0.9em; }
+          .points { text-align: right; }
+          .points-value { font-size: 1.5em; font-weight: bold; color: #4CAF50; }
+          .loading { text-align: center; padding: 40px; }
+          .error { background: rgba(255,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        </style>
+  </head>
+  <body>
+      <div class="container">
+            <h1>AwardJet</h1>
+          <div class="search-form">
+                <div class="form-row">
+                        <div class="form-group">
+                                  <label>From</label>
+                                  <input type="text" id="from" placeholder="MIA" maxlength="3">
+                        </div>div>
+                        <div class="form-group">
+                                  <label>To</label>
+                                  <input type="text" id="to" placeholder="MAD" maxlength="3">
+                        </div>div>
+                        <div class="form-group">
+                                  <label>Date</label>
+                                  <input type="date" id="date">
+                        </div>div>
+                        <div class="form-group">
+                                  <label>Cabin</label>
+                                  <select id="cabin">
+                                              <option value="economy">Economy</option>option>
+                                              <option value="business" selected>Business</option>option>
+                                              <option value="first">First</option>option>
+                                  </select>select>
+                        </div>div>
+                </div>div>
+                <button id="searchBtn" onclick="search()">Search Award Flights</button>button>
+          </div>div>
+          <div id="results" class="results" style="display:none;"></div>div>
+      </div>div>
+    <script>
+          document.getElementById('date').valueAsDate = new Date(Date.now() + 30*24*60*60*1000);
+          async function search() {
+                  const btn = document.getElementById('searchBtn');
+                  const results = document.getElementById('results');
+                  btn.disabled = true; btn.textContent = 'Searching...';
+                  results.style.display = 'block';
+                  results.innerHTML = '<div class="loading">Searching airlines...</div>';
+                  try {
+                            const res = await fetch('/api/search', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({
+                                                      from: document.getElementById('from').value.toUpperCase(),
+                                                      to: document.getElementById('to').value.toUpperCase(),
+                                                      date: document.getElementById('date').value,
+                                                      cabin: document.getElementById('cabin').value
+                                        })
+                            });
+                            const data = await res.json();
+                            if (data.error) throw new Error(data.error);
+                            displayResults(data);
+                  } catch (e) {
+                            results.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
+                  }
+                  btn.disabled = false; btn.textContent = 'Search Award Flights';
+          }
+          function displayResults(data) {
+                  const results = document.getElementById('results');
+                  if (!data.results || data.results.length === 0) {
+                            results.innerHTML = '<p>No award availability found for this route.</p>';
+                            return;
+                  }
+                  let html = '<h3>Found ' + data.results.length + ' options</h3>';
+                  data.results.forEach(f => {
+                            html += '<div class="flight"><div class="flight-info"><div class="airline">' + f.airline + '</div><div class="route">' + f.departure + ' - ' + f.arrival + '</div></div><div class="points"><div class="points-value">' + f.points.toLocaleString() + '</div><div>miles</div></div></div>';
+                  });
+                  if (data.cached) html += '<p style="opacity:0.5;margin-top:15px;">Cached ' + data.cacheAge + ' ago</p>';
+                  results.innerHTML = html;
+          }
+    </script>
+  </body>
+</html>html>
+    </script></label></label></h1>
+  </body>
+    </style></title>
+  </head>
