@@ -61,7 +61,7 @@ app.post('/api/search', async (req, res) => {
         });
 
         // Aggregate all flights
-        const allFlights = results.flatMap(r => r.flights || []);
+        const allFlights = results.flatMap(r => Array.isArray(r) ? r : r.flights || []);
               const availableFlights = allFlights.filter(f => f.available);
 
         res.json({
