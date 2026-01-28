@@ -1,6 +1,6 @@
 // Safe require - returns null if module not found
 function safeRequire(path) {
-      try { return require(path); } catch (e) { console.log('Module not found:', path); return null; }
+        try { return require(path); } catch (e) { console.log('Module not found:', path); return null; }
 }
 
 const { scrapeAmerican } = safeRequire('./american') || {};
@@ -19,67 +19,56 @@ const { scrapeQantas } = safeRequire('./qantas') || {};
 const { scrapeANA } = safeRequire('./ana') || {};
 
 const AIRLINES = {
-      'AA': { name: 'American Airlines', scraper: scrapeAmerican, region: 'US' },
-      'DL': { name: 'Delta Air Lines', scraper: scrapeDelta, region: 'US' },
-      'UA': { name: 'United Airlines', scraper: scrapeUnited, region: 'US' },
-      'AS': { name: 'Alaska Airlines', scraper: scrapeAlaska, region: 'US' },
-      'B6': { name: 'JetBlue', scraper: scrapeJetBlue, region: 'US' },
-      'WN': { name: 'Southwest', scraper: scrapeSouthwest, region: 'US' },
-      'BA': { name: 'British Airways', scraper: scrapeBritish, region: 'EU' },
-      'AF': { name: 'Air France', scraper: scrapeAirFrance, region: 'EU' },
-      'VS': { name: 'Virgin Atlantic', scraper: scrapeVirgin, region: 'EU' },
-      'EK': { name: 'Emirates', scraper: scrapeEmirates, region: 'ME' },
-      'SQ': { name: 'Singapore Airlines', scraper: scrapeSingapore, region: 'APAC' },
-      'CX': { name: 'Cathay Pacific', scraper: scrapeCathay, region: 'APAC' },
-      'QF': { name: 'Qantas', scraper: scrapeQantas, region: 'APAC' },
-      'NH': { name: 'ANA', scraper: scrapeANA, region: 'APAC' }
+        'AA': { name: 'American Airlines', scraper: scrapeAmerican, region: 'US' },
+        'DL': { name: 'Delta Air Lines', scraper: scrapeDelta, region: 'US' },
+        'UA': { name: 'United Airlines', scraper: scrapeUnited, region: 'US' },
+        'AS': { name: 'Alaska Airlines', scraper: scrapeAlaska, region: 'US' },
+        'B6': { name: 'JetBlue', scraper: scrapeJetBlue, region: 'US' },
+        'WN': { name: 'Southwest Airlines', scraper: scrapeSouthwest, region: 'US' },
+        'BA': { name: 'British Airways', scraper: scrapeBritish, region: 'EU' },
+        'AF': { name: 'Air France', scraper: scrapeAirFrance, region: 'EU' },
+        'VS': { name: 'Virgin Atlantic', scraper: scrapeVirgin, region: 'EU' },
+        'EK': { name: 'Emirates', scraper: scrapeEmirates, region: 'ME' },
+        'SQ': { name: 'Singapore Airlines', scraper: scrapeSingapore, region: 'APAC' },
+        'CX': { name: 'Cathay Pacific', scraper: scrapeCathay, region: 'APAC' },
+        'QF': { name: 'Qantas', scraper: scrapeQantas, region: 'APAC' },
+        'NH': { name: 'ANA', scraper: scrapeANA, region: 'APAC' }
 };
 
-function getAirlineList() {
-      return Object.entries(AIRLINES).map(([code, info]) => ({
-              code, name: info.name, region: info.region, available: !!info.scraper
-      }));
+function getSupportedAirlines() {
+        return Object.entries(AIRLINES)
+          .filter(([code, info]) => info.scraper)
+          .map(([code, info]) => ({ code, name: info.name, region: info.region }));
 }
 
 async function searchAllAirlines({ from, to, date, cabin = 'business', airlines = null }) {
-      const codes = airlines || Object.keys(AIRLINES);
-      const normalizedCabin = cabin.toLowerCase();
-      const results = { search: { from, to, date, cabin: normalizedCabin }, airlines: {}, summary: { totalFlights: 0, bestDeals: [] }, errors: [] };
+        const airlinesToSearch = airlines || Object.keys(AIRLINES).filter(code => AIRLINES[code].scraper);
+        const normalizedCabin = cabin.toLowerCase();
+        console.log(`Searching ${from} -> ${to} on ${date}, cabin: ${normalizedCabin}`);
 
-  const promises = codes.map(code => {
-          const airline = AIRLINES[code];
-          if (!airline || !airline.scraper) {
-                    return Promise.resolve({ code, name: airline?.name, error: 'Scraper not available' });
-          }
-          return airline.scraper(from, to, date, normalizedCabin)
-            .then(flights => ({ code, name: airline.name, flights }))
-            .catch(err => ({ code, name: airline.name, error: err.message }));
+  const promises = airlinesToSearch.map(async code => {
+            const airline = AIRLINES[code];
+            if (!airline || !airline.scraper) return { code, name: airline?.name || code, flights: [], error: 'No scraper' };
+            try {
+                        const flights = await airline.scraper(from, to, date, normalizedCabin);
+                        return { code, name: airline.name, flights: Array.isArray(flights) ? flights : [] };
+            } catch (err) {
+                        return { code, name: airline.name, flights: [], error: err.message };
+            }
   });
 
-  const scraperResults = await Promise.all(promises);
+  const results = await Promise.all(promises);
+        const allFlights = results.flatMap(r => r.flights.map(f => ({ ...f, airlineCode: r.code, airlineName: r.name })));
 
-  scraperResults.forEach(r => {
-          if (r.error) {
-                    results.errors.push({ airline: r.code, error: r.error });
-                    results.airlines[r.code] = { name: r.name, status: 'error', flights: [] };
-          } else {
-                    let flights = Array.isArray(r.flights) ? r.flights : [];
-                    flights = flights.filter(f => {
-                                if (f.cabin && f.cabin.toLowerCase() === normalizedCabin) return true;
-                                if (f.cabins && f.cabins[normalizedCabin]?.available) return true;
-                                return false;
-                    });
-                    results.airlines[r.code] = { name: r.name, status: 'success', flightCount: flights.length, flights };
-                    results.summary.totalFlights += flights.length;
-                    flights.forEach(f => {
-                                const miles = f.cabins?.[normalizedCabin]?.miles || f.miles;
-                                if (miles) results.summary.bestDeals.push({ airline: r.code, miles, cabin: normalizedCabin });
-                    });
-          }
-  });
-
-  results.summary.bestDeals.sort((a, b) => a.miles - b.miles);
-      return results;
+  return {
+            search: { from, to, date, cabin: normalizedCabin },
+            results: allFlights.filter(f => {
+                        if (f.cabin && f.cabin.toLowerCase() === normalizedCabin) return true;
+                        if (f.cabins && f.cabins[normalizedCabin]?.available) return true;
+                        return f.miles || f.points;
+            }),
+            summary: { totalFlights: allFlights.length, cabin: normalizedCabin }
+  };
 }
 
-module.exports = { searchAllAirlines, getAirlineList, AIRLINES };
+module.exports = { searchAllAirlines, getSupportedAirlines, AIRLINES };
