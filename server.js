@@ -60,24 +60,7 @@ app.post('/api/search', async (req, res) => {
                   airlines: airlines || null
         });
 
-        // Aggregate all flights
-        const allFlights = results.flatMap(r => Array.isArray(r) ? r : r.flights || []);
-              const availableFlights = allFlights.filter(f => f.available);
-
-        res.json({
-                  success: true,
-                  query: { from, to, date, cabin },
-                  summary: {
-                              totalAirlines: results.length,
-                              successfulSearches: results.filter(r => r.success).length,
-                              totalFlights: allFlights.length,
-                              availableFlights: availableFlights.length
-                  },
-                  results: results,
-                  flights: availableFlights.sort((a, b) => 
-                                                         parseInt(a.miles.replace(/,/g, '')) - parseInt(b.miles.replace(/,/g, ''))
-                                                       )
-        });
+res.json(results);
       } catch (error) {
               console.error('Search error:', error);
               res.status(500).json({ error: error.message });
