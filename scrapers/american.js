@@ -1,87 +1,105 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+/**
+ * American Airlines Award Search Scraper
+ * Uses Puppeteer with stealth mode to bypass anti-bot detection
+ */
 
-const AA_CABIN_MAP = {
-          'economy': 'ECONOMY',
-          'premium': 'PREMIUM_ECONOMY', 
-          'business': 'BUSINESS',
-          'first': 'FIRST'
-};
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
-async function scrapeAmerican(from, to, date, cabin = 'business') {
-          const targetCabin = cabin.toLowerCase();
-          console.log(`[AA] Searching ${from} -> ${to} on ${date} (${targetCabin} class)`);
+const AA_API_URL = 'https://www.aa.com/booking/api/search/itinerary';
 
-  try {
-              // American Airlines award search API endpoint
-            const searchUrl = 'https://www.aa.com/booking/api/search/itinerary';
+const STEALTH_ARGS = [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920,1080'
+          ];
 
-            const response = await axios.post(searchUrl, {
+function buildSearchRequest(query) {
+            return {
+                          metadata: { selectedProducts: [], tripType: 'OneWay', udo: {} },
+                          passengers: [{ type: 'adult', count: 1 }],
+                          queryParams: { sliceIndex: 0, sessionId: '', solutionId: '', solutionSet: '' },
+                          requestHeader: { clientId: 'AAcom' },
                           slices: [{
-                                          origin: from,
-                                          destination: to,
-                                          departureDate: date
+                                          allCarriers: true,
+                                          cabin: '',
+                                          departureDate: query.departureDate,
+                                          destination: query.destination,
+                                          origin: query.origin,
+                                          departureTime: '040001'
                           }],
-                          travelers: [{ type: 'adult', count: 1 }],
-                          cabin: AA_CABIN_MAP[targetCabin] || 'BUSINESS',
-                          tripType: 'OneWay',
-                          awardBooking: true
-            }, {
-                          headers: {
-                                          'Content-Type': 'application/json',
-                                          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                          },
-                          timeout: 30000
-            });
-
-            const flights = [];
-
-            if (response.data && response.data.slices) {
-                          response.data.slices.forEach(slice => {
-                                          if (slice.segments) {
-                                                            slice.segments.forEach(segment => {
-                                                                                const cabinMiles = {};
-                                                                                cabinMiles[targetCabin] = {
-                                                                                                      available: true,
-                                                                                                      miles: segment.awardMiles || segment.miles || 25000
-                                                                                };
-
-                                                                                               flights.push({
-                                                                                                                     flightNumber: `AA${segment.flightNumber || ''}`,
-                                                                                                                     departure: segment.origin || from,
-                                                                                                                     arrival: segment.destination || to,
-                                                                                                                     departureTime: segment.departureTime || '',
-                                                                                                                     arrivalTime: segment.arrivalTime || '',
-                                                                                                                     duration: segment.duration || '',
-                                                                                                                     cabin: targetCabin,
-                                                                                                                     cabins: cabinMiles,
-                                                                                                                     miles: segment.awardMiles || segment.miles || 25000,
-                                                                                                                     aircraft: segment.aircraft || ''
-                                                                                                       });
-                                                            });
-                                          }
-                          });
-            }
-
-            console.log(`[AA] Found ${flights.length} ${targetCabin} class flights`);
-              return flights;
-
-  } catch (error) {
-              console.error(`[AA] Error:`, error.message);
-              // Return demo data on error for testing
-            return [{
-                          flightNumber: 'AA100',
-                          departure: from,
-                          arrival: to,
-                          departureTime: '08:00',
-                          arrivalTime: '11:30',
-                          duration: '3h 30m',
-                          cabin: targetCabin,
-                          cabins: { [targetCabin]: { available: true, miles: 32500 } },
-                          miles: 32500,
-                          stops: 0
-            }];
-  }
+                          tripOptions: { locale: 'en_US', searchType: 'Award' },
+                          loyaltyInfo: null
+            };
 }
 
-module.exports = { scrapeAmerican };
+function parseFlightResults(data) {
+            const flights = [];
+            if (!data?.slices?.[0]?.sliceSolutions) return flights;
+
+  for (const solution of data.slices[0].sliceSolutions) {
+                const segments = solution.segments || [];
+                const firstSeg = segments[0] || {};
+                const lastSeg = segments[segments.length - 1] || {};
+
+              for (const pricing of (solution.perPassengerPrices || [])) {
+                              const miles = pricing.totalMiles || 0;
+                              const seats = pricing.seatsRemaining || 0;
+
+                  if (miles > 0 && seats > 0) {
+                                    flights.push({
+                                                        airline: 'AA',
+                                                        flightNumber: 'AA' + (firstSeg.flightNumber || ''),
+                                                        origin: firstSeg.origin?.code || '',
+                                                        destination: lastSeg.destination?.code || '',
+                                                        departureTime: firstSeg.departureDateTime || '',
+                                                        arrivalTime: lastSeg.arrivalDateTime || '',
+                                                        stops: segments.length - 1,
+                                                        cabin: pricing.cabin || 'economy',
+                                                        miles: miles,
+                                                        taxes: pricing.taxes?.amount || 0,
+                                                        seatsAvailable: seats
+                                    });
+                  }
+              }
+  }
+            return flights;
+}
+
+async function searchAA(query) {
+            let browser = null;
+            try {
+                          browser = await puppeteer.launch({ headless: 'new', args: STEALTH_ARGS });
+                          const page = await browser.newPage();
+                          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36');
+
+              await page.goto('https://www.aa.com/booking/find-flights', { waitUntil: 'networkidle2', timeout: 30000 });
+                          await new Promise(r => setTimeout(r, 2000));
+
+              const requestBody = buildSearchRequest(query);
+                          const response = await page.evaluate(async (url, body) => {
+                                          try {
+                                                            const res = await fetch(url, {
+                                                                                method: 'POST',
+                                                                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                                                                body: JSON.stringify(body),
+                                                                                credentials: 'include'
+                                                            });
+                                                            if (!res.ok) return { error: 'HTTP ' + res.status };
+                                                            return await res.json();
+                                          } catch (e) { return { error: e.message }; }
+                          }, AA_API_URL, requestBody);
+
+              await browser.close();
+                          if (response.error) throw new Error(response.error);
+                          return parseFlightResults(response);
+            } finally {
+                          if (browser) await browser.close();
+            }
+}
+
+module.exports = { searchAA };
