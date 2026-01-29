@@ -1,83 +1,91 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const { searchAllAirlines, getSupportedAirlines, AIRLINES } = require('./scrapers');
+const { searchAA } = require('./scrapers/american');
 
 const app = express();
-const PORT = process.env.PORT || 3002;
-
-app.use(cors({ origin: '*' }));
+app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Request logging
-app.use((req, res, next) => {
-      console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-      next();
-});
-
-// API status endpoint
-app.get('/api', (req, res) => {
-      res.json({
-              service: 'AwardJet Scraper API',
-              version: '2.0.0',
-              airlines: Object.keys(AIRLINES).length,
-              endpoints: {
-                        search: 'POST /api/search',
-                        airlines: 'GET /api/airlines'
-              }
-      });
-});
-
-// Get supported airlines
-app.get('/api/airlines', (req, res) => {
-      const airlines = getSupportedAirlines();
-      res.json({
-              count: airlines.length,
-              airlines: airlines
-      });
-});
-
-// Search for award flights
-app.post('/api/search', async (req, res) => {
-      try {
-              const { from, to, date, cabin = 'business', airlines } = req.body;
-
-        if (!from || !to || !date) {
-                  return res.status(400).json({ 
-                                                      error: 'Missing required fields: from, to, date' 
-                  });
-        }
-
-        console.log(`Search request: ${from} -> ${to} on ${date}, cabin: ${cabin}`);
-
-        const results = await searchAllAirlines({ 
-                                                      from, 
-                  to, 
-                  date, 
-                  cabin,
-                  airlines: airlines || null
-        });
-
-res.json(results);
-      } catch (error) {
-              console.error('Search error:', error);
-              res.status(500).json({ error: error.message });
-      }
-});
 
 // Health check
 app.get('/health', (req, res) => {
-      res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+        res.json({ status: 'ok', version: '4.0.0', method: 'puppeteer-stealth' });
 });
 
-// Serve frontend
-app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Search endpoint
+app.get('/api/search', async (req, res) => {
+        const { origin, destination, date, cabin } = req.query;
+
+          if (!origin || !destination || !date) {
+                    return res.status(400).json({
+                                error: 'Missing required parameters: origin, destination, date'
+                    });
+          }
+
+          console.log(`Searching: ${origin} -> ${destination} on ${date}`);
+
+          try {
+                    const results = await searchAA({
+                                origin: origin.toUpperCase(),
+                                destination: destination.toUpperCase(),
+                                departureDate: date,
+                                cabin: cabin || 'economy'
+                    });
+
+          res.json({
+                      success: true,
+                      source: 'American Airlines',
+                      query: { origin, destination, date, cabin },
+                      results
+          });
+          } catch (error) {
+                    console.error('Search error:', error);
+                    res.status(500).json({
+                                success: false,
+                                error: error.message,
+                                details: 'Failed to fetch award availability'
+                    });
+          }
 });
 
+// Multi-airline search
+app.post('/api/search', async (req, res) => {
+        const { origin, destination, departureDate, cabin, airlines } = req.body;
+
+           if (!origin || !destination || !departureDate) {
+                     return res.status(400).json({
+                                 error: 'Missing required parameters'
+                     });
+           }
+
+           console.log(`Multi-search: ${origin} -> ${destination} on ${departureDate}`);
+
+           try {
+                     const results = await searchAA({
+                                 origin: origin.toUpperCase(),
+                                 destination: destination.toUpperCase(),
+                                 departureDate,
+                                 cabin: cabin || 'economy'
+                     });
+
+          res.json({
+                      success: true,
+                      query: { origin, destination, departureDate, cabin },
+                      results: {
+                                    AA: results
+                      }
+          });
+           } catch (error) {
+                     console.error('Search error:', error);
+                     res.status(500).json({
+                                 success: false,
+                                 error: error.message
+                     });
+           }
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-      console.log(`AwardJet Scraper API running on port ${PORT}`);
-      console.log(`Supporting ${Object.keys(AIRLINES).length} airlines`);
+        console.log(`AwardJet API running on port ${PORT}`);
+        console.log('Using Puppeteer stealth mode for scraping');
 });
