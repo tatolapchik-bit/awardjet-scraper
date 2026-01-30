@@ -9,7 +9,7 @@ app.use(express.json());
 
 // Health check
 app.get('/health', (req, res) => {
-        res.json({ status: 'ok', version: '4.0.0', method: 'puppeteer-stealth' });
+        res.json({ status: 'ok', version: '4.1.0', method: 'puppeteer-stealth' });
 });
 
 // Search endpoint
