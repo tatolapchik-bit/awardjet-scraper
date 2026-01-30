@@ -1,23 +1,23 @@
 {
-            "name": "awardjet-scraper",
-            "version": "4.1.0",
-            "description": "Award flight search API using Puppeteer stealth",
-            "main": "server.js",
-            "scripts": {
-                          "start": "node server.js",
-                          "dev": "node server.js"
-            },
-            "dependencies": {
-                          "express": "^4.18.2",
-                          "cors": "^2.8.5",
-                          "dotenv": "^16.3.1",
-                          "puppeteer-core": "^21.6.0",
-                          "puppeteer-extra": "^3.3.6",
-                          "puppeteer-extra-plugin-stealth": "^2.11.2",
-                          "@upstash/redis": "^1.28.0",
-                          "@sparticuz/chromium": "^119.0.2"
-            },
-            "engines": {
-                          "node": ">=18.0.0"
-            }
+              "name": "awardjet-scraper",
+              "version": "4.2.0",
+              "description": "Award flight search API using rebrowser anti-detection",
+              "main": "server.js",
+              "scripts": {
+                              "start": "node server.js",
+                              "dev": "node server.js"
+              },
+              "dependencies": {
+                              "express": "^4.18.2",
+                              "cors": "^2.8.5",
+                              "dotenv": "^16.3.1",
+                              "rebrowser-puppeteer-core": "^24.4.0",
+                              "puppeteer-extra": "^3.3.6",
+                              "puppeteer-extra-plugin-stealth": "^2.11.2",
+                              "@upstash/redis": "^1.28.0",
+                              "@sparticuz/chromium": "^119.0.2"
+              },
+              "engines": {
+                              "node": ">=18.0.0"
+              }
 }
